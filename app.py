@@ -1,8 +1,9 @@
 import asyncio
-import os
-import logging
-from pyexpat.errors import messages
 
+import logging
+import os
+import re
+from findi_total_cost import  final
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
@@ -11,111 +12,147 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
-TOKEN = '7278593611:AAHnok5stRNTA0-7hwrgb2bV9ObZ2ui-sb4'
+TOKEN = '7797972820:AAGZGsZSXzvJuR-1t0kxjF5BfTlxpkWWTwE'
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+
+
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("bot_errors.log"),  # Логи записываются в файл
-        logging.StreamHandler()  # Логи выводятся в консоль
+        logging.FileHandler("bot_errors.log"),
+        logging.StreamHandler()
     ]
 )
 
-# Состояния для FSM
+
 class FeedbackState(StatesGroup):
     waiting_for_feedback = State()
     waiting_for_photo = State()
 
+
+class MemberState(StatesGroup):
+    waiting_for_member = State()
+
+
 # Кнопки
 upload_button = KeyboardButton(text='📸 Загрузить чек')
-feedback_button = KeyboardButton(text='💬 Оставить отзыв')
 
-# Создаем клавиатуру с кнопками
 greet_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [upload_button],  # Кнопка "Загрузить чек" в первой строке
-        [feedback_button]  # Кнопка "Оставить отзыв" во второй строке
+        [upload_button]
     ],
-    resize_keyboard=True,# Автоматически подстраивать размер клавиатуры
+    resize_keyboard=True,
     input_field_placeholder='Выберите пункт меню'
 )
 
-# Команда /start
+members_button = InlineKeyboardButton(text="По количеству гостей", callback_data="members")
+keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [members_button]
+])
+
+
 @dp.message(Command('start'))
 async def start_command(message: types.Message):
-    await message.answer("Привет! Я бот [...]! Я помогу тебе разделить счет.")
-    await message.answer("Загрузи фотографию чека, и я предложу тебе удобные варианты разделения.", reply_markup=greet_kb)
+    await message.answer("Привет! Я помогу тебе разделить счет.")
+    await message.answer("Загрузи фотографию чека, и я предложу тебе удобные варианты разделения.",
+                         reply_markup=greet_kb)
 
-# Обработчик нажатия кнопки "Загрузить чек"
-@dp.message(F.text =='📸 Загрузить чек')
+
+@dp.message(F.text == '📸 Загрузить чек')
 async def request_photo(message: types.Message, state: FSMContext):
     await message.answer("Пожалуйста, загрузите фотографию чека.")
-    await state.set_state(FeedbackState.waiting_for_photo)  # Устанавливаем состояние ожидания фотографии
-members_button = InlineKeyboardButton(text="количество", callback_data="members")
-position_button = InlineKeyboardButton(text="разделение по позициям", callback_data="position")
-w_button = InlineKeyboardButton(text="x1", callback_data="x1")
-q_button = InlineKeyboardButton(text="x2", callback_data="x2")
-keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [members_button, position_button],
-        [w_button, q_button]
+    await state.set_state(FeedbackState.waiting_for_photo)
 
-    ])
-# Обработчик получения фотографии
-@dp.message(FeedbackState.waiting_for_photo,F.photo)
+
+@dp.message(FeedbackState.waiting_for_photo, F.photo)
 async def handle_photo(message: types.Message, state: FSMContext):
-    # Получаем файл фотографии
-    photo = message.photo[-1]  # Получаем наибольшее качество фотографии
+    photo = message.photo[-1]
     file_id = photo.file_id
     file = await bot.get_file(file_id)
-    file_path = f'feedbacks/{file.file_path.split("/")[-1]}'
+    file_path = f'images/{file.file_path.split("/")[-1]}'
+
     await bot.download_file(file.file_path, file_path)
-    await message.answer("Спасибо! Чек загружен. Теперь вы можете оставить отзыв или продолжить.")
-    await state.clear()  # Очистка состояния
-@dp.message(Command('test'))
-async def handle_solution(message: types.Message,state: FSMContext):
-    await message.answer("выберите удобный вариант разделения",reply_markup=keyboard)
+    await message.answer("Спасибо! Чек загружен. Теперь вы можете продолжить.")
+    await message.answer("выберите удобный вариант разделения", reply_markup=keyboard)
+    await state.clear()
+
 
 @dp.callback_query(F.data == "members")
-async def members(callback_query: types.CallbackQuery,state: FSMContext):
-    user_id: int = callback_query.from_user.id
-    await callback_query.message.answer('введите количество посетителей')
-    await state.set_state()
-# обработка фото ...
+async def members(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.message.answer('Введите количество посетителей')
+    await state.set_state(MemberState.waiting_for_member)
 
-# @dp.message(Command('💬 Оставить отзыв'))
-# async def handle_feedback(message: types.Message, state: FSMContext):
-#     await message.answer("Пожалуйста, оставьте свой отзыв:")
-#     await state.set_state(FeedbackState.waiting_for_feedback)
-#
-# @dp.message(FeedbackState.waiting_for_feedback)
-# async def save_feedback(message: types.Message, state: FSMContext):
-#     feedback_text = message.text
-#     user_id = message.from_user.id  # Получаем id пользователя
-#     try:
-#         # Сохраняем отзыв в файл
-#         save_feedback_to_file(feedback_text, user_id)
-#         await message.answer("Спасибо за ваш отзыв!")
-#     except Exception as e:
-#         await message.answer(f"Произошла ошибка при сохранении отзыва: {str(e)}")
-#     finally:
-#         await state.clear()  # Очистка состояния
-#
-# # Функция для записи отзыва в файл
-# def save_feedback_to_file(feedback_text, user_id):
-#     folder = 'feedbacks'  # Папка для хранения отзывов
-#     if not os.path.exists(folder):
-#         os.makedirs(folder)  # Если папка не существует, создаем её
-#     file_path = os.path
+
+@dp.message(MemberState.waiting_for_member)
+async def func_member(message: types.Message, state: FSMContext):
+    try:
+        # Проверяем, что введено число
+        members_count = int(message.text)
+
+        if members_count <= 0:
+            await message.answer("Число должно быть больше 0. Введите корректное количество.")
+            return
+
+        try:
+            # Проверяем существование папки
+            if not os.path.exists('images'):
+                await message.answer("Папка с чеками не найдена. Загрузите чек сначала.")
+                return
+
+            files = os.listdir('images')
+
+            # Проверяем, что папка не пуста
+            if not files:
+                await message.answer("Нет загруженных чеков. Загрузите чек сначала.")
+                return
+
+            # Сортируем файлы по времени изменения (новые сначала)
+            files.sort(key=lambda x: os.path.getmtime(os.path.join('images', x)), reverse=True)
+            last_file = files[0]  # Берем самый новый файл
+            file_path = os.path.join('images', last_file)
+
+            print(f"Обрабатываем файл: {file_path}")  # Отладочная информация
+
+            # Получаем общую стоимость
+            total_cost = float(final(file_path))
+            print(f"Распознанная сумма: {total_cost}")  # Отладочная информация
+
+            if total_cost <= 0:
+                await message.answer("Не удалось распознать сумму в чеке. Попробуйте загрузить чек снова.")
+                return
+
+            # Рассчитываем стоимость на человека
+            cost_per_person = total_cost / members_count
+
+            # Формируем сообщение с результатами
+            result_message = (
+                f"Общая стоимость: {total_cost:.2f}₽\n"
+                f"Количество гостей: {members_count}\n\n"
+            )
+
+            for i in range(1, members_count + 1):
+                result_message += f"Гость {i} — {cost_per_person:.2f}₽\n"
+
+            await message.answer(result_message)
+
+        except Exception as e:
+            logging.error(f"Ошибка при обработке чека: {str(e)}", exc_info=True)
+            await message.answer("Произошла ошибка при обработке чека. Попробуйте еще раз.")
+
+    except ValueError:
+        await message.answer("Пожалуйста, введите число (например: 2, 3, 4).")
+    finally:
+        await state.clear()
 
 async def main():
     print('Бот запущен')
     await dp.start_polling(bot)
 
-# Запуск бота
+
 if __name__ == '__main__':
     asyncio.run(main())

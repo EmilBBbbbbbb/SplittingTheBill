@@ -2,9 +2,11 @@ import pytesseract
 import re
 import cv2
 
-# Укажите путь к tesseract, если он не добавлен в PATH
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# # Укажите путь к tesseract, если он не добавлен в PATH
+# pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# tessdata_dir_config = '--tessdata-dir "/opt/homebrew/share/tessdata/"'
 
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 def preprocess_image(image):
     """Предварительная обработка изображения для улучшения распознавания"""
@@ -19,7 +21,14 @@ def extract_total_region(image_path):
     :param image_path: путь к изображению чека
     :return:изображение области
     """
-    target_words = ['итог', 'итого']
+    target_words = [
+        'итог', 'итого', 'к оплате',
+        'ИТОГ', 'ИТОГО', 'К ОПЛАТЕ',  # CAPS LOCK варианты
+        'Итог', 'Итого', 'К оплате',  # С большой буквы
+        'Итого:', 'ИТОГО:', 'К оплате:',  # С двоеточием
+        'Сумма', 'СУММА', 'сумма',
+        'Всего', 'ВСЕГО', 'всего'
+    ]
 
     # Загрузка изображения
     image = cv2.imread(image_path)
@@ -29,7 +38,6 @@ def extract_total_region(image_path):
     # Распознавание текста с координатами
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     data = pytesseract.image_to_data(rgb, lang='rus', output_type=pytesseract.Output.DICT)
-
     for i in range(len(data['text'])):
         text = data['text'][i].lower()
         conf = int(data['conf'][i])
@@ -88,18 +96,16 @@ def extract_max_amount(image):
     return max(amounts_float) if amounts_float else "Не удалось извлечь сумму"
 
 
-# Пример использования:
-if __name__ == "__main__":
 
-    for image_path in ['images/img.jpg', 'images/img_2.jpg',
-                       'images/img2.jpg']:
 
-        # 1. Получаем область с итогом
-        roi = extract_total_region(image_path)
+def final(image_path) -> str :
 
-        if roi is not None:
-            # 2. Извлекаем сумму из области
-            total = extract_max_amount(roi)
-            print(f"Итоговая сумма: {total}")
-        else:
-            print("Ключевые слова не найдены")
+    # 1. Получаем область с итогом
+    roi = extract_total_region(image_path)
+
+    if roi is not None:
+        # 2. Извлекаем сумму из области
+        total = extract_max_amount(roi)
+        return total
+
+
