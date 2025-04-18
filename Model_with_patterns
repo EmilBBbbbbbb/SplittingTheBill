@@ -1,0 +1,55 @@
+import pytesseract
+from PIL import Image
+import re
+import os
+
+def parse_line(line):
+    pattern = r"(?P<name>.+?)\s{1,}(?P<qty>\d+[.,]?\d*)\s{1,}(?P<price>\d+[.,]?\d*)$"
+    match = re.match(pattern, line.strip())
+    if match:
+        return {
+            "item": match.group("name").strip(),
+            "qty": float(match.group("qty").replace(",", ".")),
+            "price": float(match.group("price").replace(",", "."))
+        }
+
+    pattern_alt = r"(?P<name>.+?)\s+(?P<qty>\d+)\s*[xX*]\s*(?P<price>\d+[.,]?\d*)"
+    match = re.match(pattern_alt, line.strip())
+    if match:
+        return {
+            "item": match.group("name").strip(),
+            "qty": float(match.group("qty")),
+            "price": float(match.group("price").replace(",", "."))
+        }
+
+    return None
+
+
+def parse_receipt_text(text):
+    items = []
+    lines = text.split('\n')
+    for line in lines:
+        parsed = parse_line(line)
+        if parsed:
+            items.append(parsed)
+    return items
+
+
+def process_receipt_image(image_path):
+    image = Image.open(image_path)
+    text = pytesseract.image_to_string(image, lang='rus')
+    return parse_receipt_text(text)
+
+
+receipt_images = [
+    "images/img.jpg",
+]
+
+for path in receipt_images:
+    print(f"\n--- Чек: {os.path.basename(path)} ---")
+    try:
+        items = process_receipt_image(path)
+        for item in items:
+            print(item)
+    except Exception as e:
+        print(f"Ошибка при обработке {path}: {e}")
